@@ -1,0 +1,116 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>المحلل</title>
+<style>
+:root{--bg:#EEF1EC;--ink:#16241D;--mut:#5C6B62;--pitch:#1F6B4A;--line:#C9D2CA;--card:#fff;--gold:#B8862B;--red:#B3372F}
+@media(prefers-color-scheme:dark){:root{--bg:#121A16;--ink:#E6ECE7;--mut:#93A39A;--pitch:#4FB98A;--line:#2A3830;--card:#19241E;--gold:#D9A94B;--red:#E0665D}}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 Cairo,Tajawal,system-ui,sans-serif;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom)}
+main{max-width:640px;margin:0 auto;padding:18px 0 40px}
+h1{font-size:26px;margin:0 0 2px}h2{font-size:17px;margin:0}
+.sub{color:var(--mut);margin:0 0 16px}
+details,.pkg{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 12px}
+summary{cursor:pointer;font-weight:700}
+label{display:block;margin:10px 0 2px;color:var(--mut);font-size:13px}
+input[type=text],input[type=number],input[type=password]{width:100%;padding:9px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--ink);font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lg{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px}.lg label{margin:0;color:var(--ink);font-size:14px}
+button{width:100%;padding:13px;border:0;border-radius:8px;background:var(--pitch);color:#fff;font:700 16px inherit;cursor:pointer;margin:6px 0 14px}
+button:disabled{opacity:.5}button:focus-visible,summary:focus-visible{outline:3px solid var(--gold)}
+#st{color:var(--mut);margin:0 0 12px}
+.hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--pitch);padding-bottom:6px;margin-bottom:6px}
+.hd b{color:var(--pitch)}.meta{color:var(--mut);font-size:13px}
+.leg{padding:8px 0;border-bottom:1px solid var(--line)}.leg:last-child{border:0}
+.leg .t{font-weight:700}.leg .d{display:flex;justify-content:space-between;color:var(--mut);font-size:13px}
+.od{color:var(--gold);font-weight:700}.stk{margin-top:8px;font-weight:700}
+.note{font-size:12.5px;color:var(--mut);border-top:1px solid var(--line);padding-top:10px;margin-top:18px}
+</style></head><body><main>
+<h1>المحلل</h1><p class="sub">تحليل احتمالات، اختيار Value، وبناء بكجات مستقلة عن بعضها.</p>
+<details open><summary>الإعدادات</summary>
+<label>مفتاح The Odds API</label><input type="password" id="ko">
+<label>مفتاح API-Football</label><input type="password" id="kf">
+<div class="row"><div><label>الرصيد</label><input type="number" id="bk" value="1000"></div>
+<div><label>عدد الأيام</label><input type="number" id="dy" value="2" min="1" max="7"></div>
+<div><label>سقف الرهان % من الرصيد</label><input type="number" id="mb" value="1.5" step=".1"></div>
+<div><label>أقل Edge %</label><input type="number" id="me" value="3" step=".5"></div></div>
+<label>أقصى عدد دوريات بكل تحليل (كل دوري فيه مباريات يستهلك من حصة الأودز)</label><input type="number" id="ml" value="20" min="1"></details>
+<button id="go">حلّل المباريات</button><p id="st"></p><div id="out"></div>
+<p class="note">النموذج يمزج توقّع Poisson المبني على أهداف الفرق مع احتمال السوق بعد إزالة الهامش، ويتجاهل أي رهان يبتعد كثيراً عن السوق. هذه أداة تحليل وليست ضمان ربح. الركنيات والكروت والفاولات تحتاج بيانات الحكم وتفاصيل المباريات، وهي المرحلة التالية.</p>
+</main><script>
+const AF={soccer_epl:39,soccer_spain_la_liga:140,soccer_italy_serie_a:135,soccer_germany_bundesliga:78,soccer_france_ligue_one:61,soccer_uefa_champs_league:2,soccer_uefa_europa_league:3,soccer_uefa_europa_conf_league:848,soccer_netherlands_eredivisie:88,soccer_portugal_primeira_liga:94,soccer_belgium_first_div:144,soccer_turkey_super_league:203,soccer_saudi_arabia_pro_league:307,soccer_efl_champ:40,soccer_spain_segunda_division:141,soccer_italy_serie_b:136,soccer_germany_bundesliga2:79,soccer_france_ligue_two:62,soccer_scotland_premiership:179,soccer_greece_super_league:197,soccer_brazil_campeonato:71,soccer_argentina_primera_division:128,soccer_usa_mls:253,soccer_mexico_ligamx:262,soccer_conmebol_copa_libertadores:13,soccer_conmebol_copa_sudamericana:11,soccer_england_league1:41,soccer_england_league2:42,soccer_germany_liga3:80,soccer_switzerland_superleague:207,soccer_austria_bundesliga:218,soccer_denmark_superliga:119,soccer_sweden_allsvenskan:113,soccer_norway_eliteserien:103,soccer_poland_ekstraklasa:106,soccer_japan_j_league:98,soccer_korea_kleague1:292,soccer_china_superleague:169,soccer_australia_aleague:188,soccer_brazil_serie_b:72,soccer_chile_campeonato:265,soccer_league_of_ireland:357,soccer_finland_veikkausliiga:244,soccer_uefa_nations_league:5,soccer_fifa_world_cup:1};
+const $=i=>document.getElementById(i),ids=['ko','kf','bk','dy','mb','me','ml'];
+let S={};try{S=JSON.parse(localStorage.getItem('cfg')||'{}')}catch(e){}
+ids.forEach(i=>{if(S[i]!=null)$(i).value=S[i]});
+const save=()=>{try{const o={};ids.forEach(i=>o[i]=$(i).value);localStorage.setItem('cfg',JSON.stringify(o))}catch(e){}};
+const st=t=>$('st').textContent=t;
+const fact=n=>n<2?1:n*fact(n-1),pois=(l,k)=>Math.exp(-l)*Math.pow(l,k)/fact(k);
+function grid(lh,la){const g=[];for(let i=0;i<10;i++)for(let j=0;j<10;j++)g.push([i,j,pois(lh,i)*pois(la,j)]);return g}
+const norm=n=>n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(fc|cf|afc|sc|ac|as|us|ssc|rc|1\.|fsv|tsg|vfb|vfl|sv|ud|cd|real|club|de|the)\b/g,'').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+const same=(a,b)=>{a=norm(a);b=norm(b);return a&&b&&(a===b||a.includes(b)||b.includes(a)||a.split(' ')[0]===b.split(' ')[0])};
+async function strengths(id){
+ const k='st'+id;try{const c=JSON.parse(localStorage.getItem(k));if(c&&Date.now()-c.t<1728e5)return c.d}catch(e){}
+ const Y=new Date().getFullYear();let rows=[];
+ for(const y of [Y,Y-1]){
+  const r=await fetch(`https://v3.football.api-sports.io/standings?league=${id}&season=${y}`,{headers:{'x-apisports-key':$('kf').value}});
+  const j=await r.json();rows=[];
+  (j.response||[]).forEach(x=>x.league.standings.forEach(s=>s.forEach(t=>t.all.played>0&&rows.push({n:t.team.name,p:t.all.played,f:t.all.goals.for,a:t.all.goals.against}))));
+  await new Promise(r=>setTimeout(r,6500));
+  if(rows.length>=6)break}
+ if(rows.length<6)throw new Error('no stats');
+ const P=rows.reduce((s,x)=>s+x.p,0),mu=rows.reduce((s,x)=>s+x.f,0)/P,sh=x=>x.p/(x.p+6);
+ const d={mu,t:rows.map(x=>({n:x.n,att:1+((x.f/x.p)/mu-1)*sh(x),def:1+((x.a/x.p)/mu-1)*sh(x)}))};
+ try{localStorage.setItem(k,JSON.stringify({t:Date.now(),d}))}catch(e){}return d}
+function cands(ev,sd){
+ const H=sd.t.find(t=>same(t.n,ev.home_team)),A=sd.t.find(t=>same(t.n,ev.away_team));if(!H||!A)return null;
+ const lh=sd.mu*1.15*H.att*A.def,la=sd.mu*.87*A.att*H.def,g=grid(lh,la);
+ const pH=g.filter(x=>x[0]>x[1]).reduce((s,x)=>s+x[2],0),pD=g.filter(x=>x[0]==x[1]).reduce((s,x)=>s+x[2],0),pA=1-pH-pD;
+ const M={};
+ ev.bookmakers.forEach(b=>b.markets.forEach(m=>{const grp={};m.outcomes.forEach(o=>(grp[o.point??0]=grp[o.point??0]||[]).push(o));
+  Object.values(grp).forEach(os=>{const s=os.reduce((a,o)=>a+1/o.price,0);os.forEach(o=>{const k=m.key+'|'+o.name+'|'+(o.point??'');const e=M[k]=M[k]||{best:0,ps:[],bk:'',m:m.key,n:o.name,pt:o.point};if(o.price>e.best){e.best=o.price;e.bk=b.title}e.ps.push(1/o.price/s)})})}));
+ let best=null;
+ for(const e of Object.values(M)){
+  let pm;if(e.m=='h2h')pm=e.n==ev.home_team?pH:e.n==ev.away_team?pA:pD;
+  else if(e.m=='totals'&&e.pt%1==.5){const ov=g.filter(x=>x[0]+x[1]>e.pt).reduce((s,x)=>s+x[2],0);pm=e.n=='Over'?ov:1-ov}else continue;
+  const pk=e.ps.reduce((a,b)=>a+b,0)/e.ps.length;if(Math.abs(pm-pk)>.12)continue;
+  const p=.5*pm+.5*pk,edge=p*e.best-1;
+  if(!best||edge>best.edge)best={ev,label:e.m=='h2h'?(e.n=='Draw'?'تعادل':'فوز '+e.n):(e.n=='Over'?'أكثر من ':'أقل من ')+e.pt+' أهداف',odd:e.best,bk:e.bk,p,edge,cat:e.m}}
+ return best}
+const kel=(p,o,f,cap)=>Math.max(0,Math.min(cap,((p*o-1)/(o-1))*f));
+function build(pk,bank,cap){
+ pk.sort((a,b)=>b.edge-a.edge);const used=new Set(),P=[];
+ const take=(arr,n)=>{const r=[];for(const x of arr){if(r.length>=n)break;if(!used.has(x)){r.push(x);used.add(x)}}return r};
+ const singles=take(pk.filter(x=>x.edge>=.06&&x.p>=.35),4);
+ singles.forEach(x=>P.push({name:'رهان فردي Value',legs:[x],frac:kel(x.p,x.odd,.25,cap)}));
+ const safe=take(pk.filter(x=>x.p>=.55&&x.odd>=1.3),3);
+ if(safe.length>=2)P.push({name:'بكج آمن',legs:safe,frac:.01});else safe.forEach(x=>used.delete(x));
+ const mid=take(pk.filter(x=>x.p>=.38),3);if(mid.length>=2)P.push({name:'بكج متوسط',legs:mid,frac:.006});else mid.forEach(x=>used.delete(x));
+ const lk=take(pk,4);if(lk.length>=3)P.push({name:'بكج حظ',legs:lk,frac:.002});
+ return P.map(p=>({...p,odd:p.legs.reduce((a,x)=>a*x.odd,1),pr:p.legs.reduce((a,x)=>a*x.p,1),stake:(p.frac*bank)}))}
+$('go').onclick=async()=>{
+ save();const b=$('go');b.disabled=true;$('out').innerHTML='';
+ try{
+  const ko=$('ko').value,kf=$('kf').value;if(!ko||!kf)throw new Error('أدخل المفتاحين في الإعدادات');
+  const to=new Date(Date.now()+ +$('dy').value*864e5).toISOString().replace(/\.\d+Z$/,'Z');
+  st('جاري جلب قائمة الدوريات…');
+  const sr=await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ko}`);
+  if(!sr.ok)throw new Error('The Odds API: '+sr.status);
+  const all=(await sr.json()).filter(s=>s.key.startsWith('soccer_')&&!s.has_outrights),ks=Object.keys(AF);
+  const act=all.filter(s=>AF[s.key]).sort((a,b)=>ks.indexOf(a.key)-ks.indexOf(b.key)).slice(0,+$('ml').value||20),unm=all.length-all.filter(s=>AF[s.key]).length;
+  const pk=[];let seen=0,skip=0,lgs=0,rem='',warn='';
+  for(const s of act){
+   st('جاري تحليل '+s.title+'…');
+   const r=await fetch(`https://api.the-odds-api.com/v4/sports/${s.key}/odds?apiKey=${ko}&regions=eu&markets=h2h,totals&oddsFormat=decimal&commenceTimeTo=${to}`);
+   if(!r.ok){if(r.status==401||r.status==429){warn=' توقّف التحليل بسبب حد الاستهلاك.';break}continue}
+   rem=r.headers.get('x-requests-remaining')||rem;
+   const evs=(await r.json()).filter(e=>new Date(e.commence_time)>new Date());
+   if(!evs.length)continue;lgs++;
+   let sd;try{sd=await strengths(AF[s.key])}catch(e){skip+=evs.length;continue}
+   for(const ev of evs){seen++;const c=cands(ev,sd);if(!c){skip++;continue}if(c.edge*100>=+$('me').value)pk.push(c)}}
+  const P=build(pk,+$('bk').value,+$('mb').value/100);
+  st(`تم تحليل ${seen} مباراة من ${lgs} دوري، ${pk.length} فيها Value، وتخطّينا ${skip}.${unm?` ${unm} دوري نشط بلا إحصائيات مربوطة.`:''}${rem?` المتبقي من حصة الأودز: ${rem}.`:''}${warn}`);
+  $('out').innerHTML=P.length?P.map(p=>`<section class="pkg"><div class="hd"><h2>${p.name}</h2><b>${p.odd.toFixed(2)}</b></div>
+  ${p.legs.map(x=>`<div class="leg"><div class="t">${x.ev.home_team} ضد ${x.ev.away_team}</div><div>${x.label} <span class="od">@${x.odd.toFixed(2)}</span></div>
+  <div class="d"><span>احتمالنا ${(x.p*100).toFixed(0)}% | Edge ${(x.edge*100).toFixed(1)}%</span><span>${x.bk}</span></div></div>`).join('')}
+  <div class="stk">المبلغ المقترح: ${p.stake.toFixed(2)} <span class="meta">| احتمال الفوز ${(p.pr*100).toFixed(0)}%</span></div></section>`).join(''):'<p>ما في رهانات فيها Value واضح بهالفترة. عدم الرهان قرار سليم.</p>'
+ }catch(e){st('خطأ: '+e.message)}b.disabled=false};
+</script></body></html>
