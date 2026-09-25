@@ -33,12 +33,12 @@ button:disabled{opacity:.5}button:focus-visible,summary:focus-visible{outline:3p
 <div><label>عدد الأيام</label><input type="number" id="dy" value="2" min="1" max="7"></div>
 <div><label>سقف الرهان % من الرصيد</label><input type="number" id="mb" value="1.5" step=".1"></div>
 <div><label>أقل Edge %</label><input type="number" id="me" value="3" step=".5"></div></div>
-<label>أقصى عدد دوريات بكل تحليل (كل دوري فيه مباريات يستهلك من حصة الأودز)</label><input type="number" id="ml" value="20" min="1"></details>
+<label>أقصى عدد دوريات بكل تحليل (كل دوري فيه مباريات يستهلك من حصة الأودز)</label><input type="number" id="ml" value="20" min="1"><label>مسابقات بلا إحصائيات، منها المنتخبات (تحليل بمقارنة الأسعار)</label><input type="number" id="mu" value="6" min="0"></details>
 <button id="go">حلّل المباريات</button><p id="st"></p><div id="out"></div>
 <p class="note">النموذج يمزج توقّع Poisson المبني على أهداف الفرق مع احتمال السوق بعد إزالة الهامش، ويتجاهل أي رهان يبتعد كثيراً عن السوق. هذه أداة تحليل وليست ضمان ربح. الركنيات والكروت والفاولات تحتاج بيانات الحكم وتفاصيل المباريات، وهي المرحلة التالية.</p>
 </main><script>
 const AF={soccer_epl:39,soccer_spain_la_liga:140,soccer_italy_serie_a:135,soccer_germany_bundesliga:78,soccer_france_ligue_one:61,soccer_uefa_champs_league:2,soccer_uefa_europa_league:3,soccer_uefa_europa_conf_league:848,soccer_netherlands_eredivisie:88,soccer_portugal_primeira_liga:94,soccer_belgium_first_div:144,soccer_turkey_super_league:203,soccer_saudi_arabia_pro_league:307,soccer_efl_champ:40,soccer_spain_segunda_division:141,soccer_italy_serie_b:136,soccer_germany_bundesliga2:79,soccer_france_ligue_two:62,soccer_scotland_premiership:179,soccer_greece_super_league:197,soccer_brazil_campeonato:71,soccer_argentina_primera_division:128,soccer_usa_mls:253,soccer_mexico_ligamx:262,soccer_conmebol_copa_libertadores:13,soccer_conmebol_copa_sudamericana:11,soccer_england_league1:41,soccer_england_league2:42,soccer_germany_liga3:80,soccer_switzerland_superleague:207,soccer_austria_bundesliga:218,soccer_denmark_superliga:119,soccer_sweden_allsvenskan:113,soccer_norway_eliteserien:103,soccer_poland_ekstraklasa:106,soccer_japan_j_league:98,soccer_korea_kleague1:292,soccer_china_superleague:169,soccer_australia_aleague:188,soccer_brazil_serie_b:72,soccer_chile_campeonato:265,soccer_league_of_ireland:357,soccer_finland_veikkausliiga:244,soccer_uefa_nations_league:5,soccer_fifa_world_cup:1};
-const $=i=>document.getElementById(i),ids=['ko','kf','bk','dy','mb','me','ml'];
+const $=i=>document.getElementById(i),ids=['ko','kf','bk','dy','mb','me','ml','mu'];
 let S={};try{S=JSON.parse(localStorage.getItem('cfg')||'{}')}catch(e){}
 ids.forEach(i=>{if(S[i]!=null)$(i).value=S[i]});
 const save=()=>{try{const o={};ids.forEach(i=>o[i]=$(i).value);localStorage.setItem('cfg',JSON.stringify(o))}catch(e){}};
@@ -75,6 +75,17 @@ function cands(ev,sd){
   const p=.5*pm+.5*pk,edge=p*e.best-1;
   if(!best||edge>best.edge)best={ev,label:e.m=='h2h'?(e.n=='Draw'?'تعادل':'فوز '+e.n):(e.n=='Over'?'أكثر من ':'أقل من ')+e.pt+' أهداف',odd:e.best,bk:e.bk,p,edge,cat:e.m}}
  return best}
+function cands2(ev){
+ if(ev.bookmakers.length<5)return null;const M={};
+ ev.bookmakers.forEach(b=>b.markets.forEach(m=>{const grp={};m.outcomes.forEach(o=>(grp[o.point??0]=grp[o.point??0]||[]).push(o));
+  Object.values(grp).forEach(os=>{const t=os.reduce((a,o)=>a+1/o.price,0);os.forEach(o=>{const k=m.key+'|'+o.name+'|'+(o.point??'');const e=M[k]=M[k]||{best:0,ps:[],pin:null,m:m.key,n:o.name,pt:o.point,bk:''};const q=1/o.price/t;
+   if(b.key=='pinnacle')e.pin=q;else if(o.price>e.best){e.best=o.price;e.bk=b.title}e.ps.push(q)})})}));
+ let best=null;
+ for(const e of Object.values(M)){
+  if(!e.best||(e.m=='totals'&&e.pt%1!=.5))continue;
+  const p=e.pin??e.ps.reduce((a,b)=>a+b,0)/e.ps.length,edge=p*e.best-1;
+  if(!best||edge>best.edge)best={ev,label:e.m=='h2h'?(e.n=='Draw'?'تعادل':'فوز '+e.n):(e.n=='Over'?'أكثر من ':'أقل من ')+e.pt+' أهداف',odd:e.best,bk:e.bk,p,edge,cat:e.m,mk:1}}
+ return best}
 const kel=(p,o,f,cap)=>Math.max(0,Math.min(cap,((p*o-1)/(o-1))*f));
 function build(pk,bank,cap){
  pk.sort((a,b)=>b.edge-a.edge);const used=new Set(),P=[];
@@ -89,27 +100,29 @@ function build(pk,bank,cap){
 $('go').onclick=async()=>{
  save();const b=$('go');b.disabled=true;$('out').innerHTML='';
  try{
-  const ko=$('ko').value,kf=$('kf').value;if(!ko||!kf)throw new Error('أدخل المفتاحين في الإعدادات');
+  const ko=$('ko').value,kf=$('kf').value;if(!ko)throw new Error('أدخل مفتاح The Odds API');
   const to=new Date(Date.now()+ +$('dy').value*864e5).toISOString().replace(/\.\d+Z$/,'Z');
-  st('جاري جلب قائمة الدوريات…');
+  st('جاري جلب قائمة المسابقات…');
   const sr=await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ko}`);
   if(!sr.ok)throw new Error('The Odds API: '+sr.status);
   const all=(await sr.json()).filter(s=>s.key.startsWith('soccer_')&&!s.has_outrights),ks=Object.keys(AF);
-  const act=all.filter(s=>AF[s.key]).sort((a,b)=>ks.indexOf(a.key)-ks.indexOf(b.key)).slice(0,+$('ml').value||20),unm=all.length-all.filter(s=>AF[s.key]).length;
-  const pk=[];let seen=0,skip=0,lgs=0,rem='',warn='';
-  for(const s of act){
-   st('جاري تحليل '+s.title+'…');
-   const r=await fetch(`https://api.the-odds-api.com/v4/sports/${s.key}/odds?apiKey=${ko}&regions=eu&markets=h2h,totals&oddsFormat=decimal&commenceTimeTo=${to}`);
-   if(!r.ok){if(r.status==401||r.status==429){warn=' توقّف التحليل بسبب حد الاستهلاك.';break}continue}
-   rem=r.headers.get('x-requests-remaining')||rem;
-   const evs=(await r.json()).filter(e=>new Date(e.commence_time)>new Date());
-   if(!evs.length)continue;lgs++;
+  const act=all.filter(s=>AF[s.key]).sort((a,b)=>ks.indexOf(a.key)-ks.indexOf(b.key)).slice(0,+$('ml').value||20),um=all.filter(s=>!AF[s.key]).slice(0,+$('mu').value||0);
+  const pk=[],mt=[];let seen=0,skip=0,lgs=0,rem='',warn='';
+  const get=async s=>{const r=await fetch(`https://api.the-odds-api.com/v4/sports/${s.key}/odds?apiKey=${ko}&regions=eu&markets=h2h,totals&oddsFormat=decimal&commenceTimeTo=${to}`);
+   if(!r.ok){if(r.status==401||r.status==429)warn=' توقّف التحليل بسبب حد الاستهلاك.';return null}
+   rem=r.headers.get('x-requests-remaining')||rem;return(await r.json()).filter(e=>new Date(e.commence_time)>new Date())};
+  for(const s of act){if(warn)break;st('جاري تحليل '+s.title+'…');
+   const evs=await get(s);if(!evs||!evs.length)continue;lgs++;
+   if(!kf){skip+=evs.length;continue}
    let sd;try{sd=await strengths(AF[s.key])}catch(e){skip+=evs.length;continue}
    for(const ev of evs){seen++;const c=cands(ev,sd);if(!c){skip++;continue}if(c.edge*100>=+$('me').value)pk.push(c)}}
+  for(const s of um){if(warn)break;st('جاري تحليل '+s.title+'…');
+   const evs=await get(s);if(!evs||!evs.length)continue;mt.push(s.title);
+   for(const ev of evs){seen++;const c=cands2(ev);if(!c){skip++;continue}if(c.edge*100>=+$('me').value)pk.push(c)}}
   const P=build(pk,+$('bk').value,+$('mb').value/100);
-  st(`تم تحليل ${seen} مباراة من ${lgs} دوري، ${pk.length} فيها Value، وتخطّينا ${skip}.${unm?` ${unm} دوري نشط بلا إحصائيات مربوطة.`:''}${rem?` المتبقي من حصة الأودز: ${rem}.`:''}${warn}`);
+  st(`تم تحليل ${seen} مباراة، ${pk.length} فيها Value، وتخطّينا ${skip}.${mt.length?` مقارنة أسعار: ${mt.join('، ')}.`:''}${rem?` المتبقي من حصة الأودز: ${rem}.`:''}${warn}`);
   $('out').innerHTML=P.length?P.map(p=>`<section class="pkg"><div class="hd"><h2>${p.name}</h2><b>${p.odd.toFixed(2)}</b></div>
-  ${p.legs.map(x=>`<div class="leg"><div class="t">${x.ev.home_team} ضد ${x.ev.away_team}</div><div>${x.label} <span class="od">@${x.odd.toFixed(2)}</span></div>
+  ${p.legs.map(x=>`<div class="leg"><div class="t">${x.ev.home_team} ضد ${x.ev.away_team}</div><div>${x.label}${x.mk?' <span class="meta">(مقارنة أسعار)</span>':''} <span class="od">@${x.odd.toFixed(2)}</span></div>
   <div class="d"><span>احتمالنا ${(x.p*100).toFixed(0)}% | Edge ${(x.edge*100).toFixed(1)}%</span><span>${x.bk}</span></div></div>`).join('')}
   <div class="stk">المبلغ المقترح: ${p.stake.toFixed(2)} <span class="meta">| احتمال الفوز ${(p.pr*100).toFixed(0)}%</span></div></section>`).join(''):'<p>ما في رهانات فيها Value واضح بهالفترة. عدم الرهان قرار سليم.</p>'
  }catch(e){st('خطأ: '+e.message)}b.disabled=false};
